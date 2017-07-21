@@ -1,7 +1,7 @@
 " Script Name: mark.vim
-" Version:     1.1.8 (global version)
-" Last Change: April 25, 2008
-" Author:      Yuheng Xie <elephant@linux.net.cn>
+" Version:     1.1.11 (global version)
+" Last Change: December 17, 2016
+" Author:      Yuheng Xie <thinelephant@gmail.com>
 " Contributor: Luc Hermitte
 "
 " Description: a little script to highlight several words in different colors
@@ -38,6 +38,15 @@
 " Bugs:        some colored words could not be highlighted
 "
 " Changes:
+" 17th Dec 2016, Yuheng Xie: fix error in vim 6.4
+" (*) added exists() check before calling vim 7 functions
+" (*) changed default mark colors
+"
+" 16th Jan 2015, Yuheng Xie: add auto event WinEnter
+" (*) added auto event WinEnter for reloading highlights after :split, etc.
+"
+" 29th Jul 2014, Yuheng Xie: call matchadd()
+" (*) added call to VIM 7.1 matchadd(), make highlighting keywords possible
 "
 " 10th Mar 2006, Yuheng Xie: jump to ANY mark
 " (*) added \* \# \/ \? for the ability of jumping to ANY mark, even when the
@@ -67,12 +76,21 @@
 
 " default colors/groups
 " you may define your own colors in you vimrc file, in the form as below:
-hi MarkWord1  ctermbg=Cyan     ctermfg=Black  guibg=#8CCBEA    guifg=Black
-hi MarkWord2  ctermbg=Green    ctermfg=Black  guibg=#A4E57E    guifg=Black
-hi MarkWord3  ctermbg=Yellow   ctermfg=Black  guibg=#FFDB72    guifg=Black
-hi MarkWord4  ctermbg=Red      ctermfg=Black  guibg=#FF7272    guifg=Black
-hi MarkWord5  ctermbg=Magenta  ctermfg=Black  guibg=#FFB3FF    guifg=Black
-hi MarkWord6  ctermbg=Blue     ctermfg=Black  guibg=#9999FF    guifg=Black
+if &t_Co < 256
+	hi MarkWord1 guifg=White ctermfg=White guibg=#FF00AF ctermbg=Magenta
+	hi MarkWord2 guifg=White ctermfg=White guibg=#FF5F00 ctermbg=Red
+	hi MarkWord3 guifg=White ctermfg=White guibg=#FFD700 ctermbg=Yellow
+	hi MarkWord4 guifg=White ctermfg=White guibg=#5FD700 ctermbg=Green
+	hi MarkWord5 guifg=White ctermfg=White guibg=#00D7FF ctermbg=Cyan
+	hi MarkWord6 guifg=White ctermfg=White guibg=#0087FF ctermbg=Blue
+else
+	hi MarkWord1 guifg=White ctermfg=White guibg=#FF00AF ctermbg=199
+	hi MarkWord2 guifg=White ctermfg=White guibg=#FF5F00 ctermbg=202
+	hi MarkWord3 guifg=White ctermfg=White guibg=#FFD700 ctermbg=220
+	hi MarkWord4 guifg=White ctermfg=White guibg=#5FD700 ctermbg=76
+	hi MarkWord5 guifg=White ctermfg=White guibg=#00D7FF ctermbg=45
+	hi MarkWord6 guifg=White ctermfg=White guibg=#0087FF ctermbg=33
+endif
 
 " Anti reinclusion guards
 if exists('g:loaded_mark') && !exists('g:force_reload_mark')
@@ -142,7 +160,7 @@ nnoremap <silent> # :if !<sid>SearchNext("b")<bar>execute "norm! #"<bar>endif<cr
 
 command! -nargs=? Mark call s:DoMark(<f-args>)
 
-autocmd! BufWinEnter * call s:UpdateMark()
+autocmd! BufWinEnter,WinEnter * call s:UpdateMark()
 
 " Functions
 
@@ -251,8 +269,18 @@ function! s:DoMark(...) " DoMark(regexp)
 			if g:mwWord{i} != ""
 				let g:mwWord{i} = ""
 				let lastwinnr = winnr()
-				exe "windo syntax clear MarkWord" . i
+				if exists("*winsaveview")
+					let winview = winsaveview()
+				endif
+				if exists("*matchdelete")
+					windo silent! call matchdelete(3333 + i)
+				else
+					exe "windo syntax clear MarkWord" . i
+				endif
 				exe lastwinnr . "wincmd w"
+				if exists("*winrestview")
+					call winrestview(winview)
+				endif
 			endif
 			let i = i + 1
 		endwhile
@@ -269,8 +297,18 @@ function! s:DoMark(...) " DoMark(regexp)
 			endif
 			let g:mwWord{i} = ""
 			let lastwinnr = winnr()
-			exe "windo syntax clear MarkWord" . i
+			if exists("*winsaveview")
+				let winview = winsaveview()
+			endif
+			if exists("*matchdelete")
+				windo silent! call matchdelete(3333 + i)
+			else
+				exe "windo syntax clear MarkWord" . i
+			endif
 			exe lastwinnr . "wincmd w"
+			if exists("*winrestview")
+				call winrestview(winview)
+			endif
 			return 0
 		endif
 		let i = i + 1
@@ -309,11 +347,21 @@ function! s:DoMark(...) " DoMark(regexp)
 				let g:mwCycle = 1
 			endif
 			let lastwinnr = winnr()
-			exe "windo syntax clear MarkWord" . i
-			" suggested by Marc Weber
-			" exe "windo syntax match MarkWord" . i . " " . quoted_regexp . " containedin=ALL"
-			exe "windo syntax match MarkWord" . i . " " . quoted_regexp . " containedin=.*"
+			if exists("*winsaveview")
+				let winview = winsaveview()
+			endif
+			if exists("*matchadd")
+				windo silent! call matchdelete(3333 + i)
+				windo silent! call matchadd("MarkWord" . i, g:mwWord{i}, -10, 3333 + i)
+			else
+				exe "windo syntax clear MarkWord" . i
+				" suggested by Marc Weber, use .* instead off ALL
+				exe "windo syntax match MarkWord" . i . " " . quoted_regexp . " containedin=.*"
+			endif
 			exe lastwinnr . "wincmd w"
+			if exists("*winrestview")
+				call winrestview(winview)
+			endif
 			return i
 		endif
 		let i = i + 1
@@ -333,11 +381,21 @@ function! s:DoMark(...) " DoMark(regexp)
 				let g:mwCycle = 1
 			endif
 			let lastwinnr = winnr()
-			exe "windo syntax clear MarkWord" . i
-			" suggested by Marc Weber
-			" exe "windo syntax match MarkWord" . i . " " . quoted_regexp . " containedin=ALL"
-			exe "windo syntax match MarkWord" . i . " " . quoted_regexp . " containedin=.*"
+			if exists("*winsaveview")
+				let winview = winsaveview()
+			endif
+			if exists("*matchadd")
+				windo silent! call matchdelete(3333 + i)
+				windo silent! call matchadd("MarkWord" . i, g:mwWord{i}, -10, 3333 + i)
+			else
+				exe "windo syntax clear MarkWord" . i
+				" suggested by Marc Weber, use .* instead off ALL
+				exe "windo syntax match MarkWord" . i . " " . quoted_regexp . " containedin=.*"
+			endif
 			exe lastwinnr . "wincmd w"
+			if exists("*winrestview")
+				call winrestview(winview)
+			endif
 			return i
 		endif
 		let i = i + 1
@@ -367,9 +425,12 @@ function! s:UpdateMark()
 				continue
 			endif
 
-			" suggested by Marc Weber
-			" exe "syntax match MarkWord" . i . " " . quoted_regexp . " containedin=ALL"
-			exe "syntax match MarkWord" . i . " " . quoted_regexp . " containedin=.*"
+			if exists("*matchadd")
+				silent! call matchadd("MarkWord" . i, g:mwWord{i}, -10, 3333 + i)
+			else
+				" suggested by Marc Weber, use .* instead off ALL
+				exe "syntax match MarkWord" . i . " " . quoted_regexp . " containedin=.*"
+			endif
 		endif
 		let i = i + 1
 	endwhile
